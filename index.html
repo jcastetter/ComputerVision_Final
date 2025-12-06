@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Teachable Machine Image Classifier Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- TensorFlow.js and Teachable Machine Image library -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f4f4f7;
+      color: #222;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+      margin: 2rem;
+      padding: 2rem;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 1.8rem;
+      text-align: center;
+    }
+
+    p.description {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      color: #555;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 0.6rem 1.4rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+      font-weight: 600;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+
+    button.secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    button:hover:not(:disabled) {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+    }
+
+    button.secondary:hover:not(:disabled) {
+      background: #d1d5db;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 800px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .preview {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      padding: 1rem;
+      background: #f9fafb;
+      min-height: 260px;
+    }
+
+    video, canvas, img {
+      max-width: 100%;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background: #111827;
+    }
+
+    .status {
+      font-size: 0.9rem;
+      color: #6b7280;
+      text-align: center;
+      min-height: 1.5rem;
+    }
+
+    .predictions {
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      padding: 1rem;
+      background: #f9fafb;
+    }
+
+    .predictions h2 {
+      margin: 0 0 0.75rem 0;
+      font-size: 1.1rem;
+    }
+
+    .prediction-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .prediction-label {
+      width: 130px;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .prediction-bar {
+      flex: 1;
+      height: 12px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+    }
+
+    .prediction-bar-inner {
+      height: 100%;
+      width: 0%;
+      background: #2563eb;
+      transition: width 0.15s ease;
+    }
+
+    .prediction-score {
+      width: 60px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-size: 0.85rem;
+      color: #4b5563;
+    }
+
+    .notice {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      text-align: center;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .file-label {
+      border-radius: 999px;
+      padding: 0.6rem 1.4rem;
+      background: #e5e7eb;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #111827;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+
+    .file-label:hover {
+      background: #d1d5db;
+      transform: translateY(-1px);
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Image Classifier Demo</h1>
+    <p class="description">
+      Powered by <strong>Google Teachable Machine</strong> and <strong>TensorFlow.js</strong>.
+      Show an object to your camera or upload an image to see the predicted class.
+    </p>
+
+    <div class="controls">
+      <button id="init-button">Start Webcam</button>
+      <button id="stop-button" class="secondary" disabled>Stop Webcam</button>
+
+      <label for="file-input" class="file-label">Upload Image</label>
+      <input id="file-input" class="file-input" type="file" accept="image/*" />
+    </div>
+
+    <div class="status" id="status">Model not loaded yet.</div>
+
+    <div class="layout">
+      <div class="preview">
+        <video id="webcam" autoplay playsinline width="400" height="300" style="display:none;"></video>
+        <img id="uploaded-image" alt="Uploaded preview" style="display:none; max-height:320px;" />
+        <canvas id="canvas" width="400" height="300" style="display:none;"></canvas>
+        <div class="notice">
+          Tip: Use consistent lighting and center your object for best results.
+        </div>
+      </div>
+
+      <div class="predictions">
+        <h2>Predictions</h2>
+        <div id="prediction-container">
+          <!-- Filled dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 🔁 STEP 1: PASTE YOUR TEACHABLE MACHINE MODEL URL HERE
+    // Example: const TM_URL = "https://teachablemachine.withgoogle.com/models/abcdEFghi/";
+    const TM_URL = "https://teachablemachine.withgoogle.com/models/48tqzj6IX/";
+
+    let model, maxPredictions;
+    let webcamStream = null;
+    let isWebcamRunning = false;
+
+    const statusEl = document.getElementById("status");
+    const webcamEl = document.getElementById("webcam");
+    const uploadedImageEl = document.getElementById("uploaded-image");
+    const canvasEl = document.getElementById("canvas");
+    const predictionContainerEl = document.getElementById("prediction-container");
+
+    const initButton = document.getElementById("init-button");
+    const stopButton = document.getElementById("stop-button");
+    const fileInput = document.getElementById("file-input");
+
+    initButton.addEventListener("click", initWebcam);
+    stopButton.addEventListener("click", stopWebcam);
+    fileInput.addEventListener("change", handleImageUpload);
+
+    // Load the Teachable Machine model
+    async function loadModel() {
+      if (model) return; // already loaded
+
+      try {
+        statusEl.textContent = "Loading model...";
+        const modelURL = TM_URL + "model.json";
+        const metadataURL = TM_URL + "metadata.json";
+        model = await tmImage.load(modelURL, metadataURL);
+        maxPredictions = model.getTotalClasses();
+
+        buildPredictionUI();
+        statusEl.textContent = "Model loaded. Start the webcam or upload an image.";
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error loading model. Check your model URL.";
+      }
+    }
+
+    // Build static prediction rows once we know the class labels
+    function buildPredictionUI() {
+      predictionContainerEl.innerHTML = "";
+      const labels = model.getClassLabels ? model.getClassLabels() : [];
+
+      for (let i = 0; i < maxPredictions; i++) {
+        const label = labels[i] || `Class ${i}`;
+
+        const row = document.createElement("div");
+        row.className = "prediction-row";
+
+        const labelEl = document.createElement("div");
+        labelEl.className = "prediction-label";
+        labelEl.textContent = label;
+
+        const bar = document.createElement("div");
+        bar.className = "prediction-bar";
+
+        const barInner = document.createElement("div");
+        barInner.className = "prediction-bar-inner";
+        barInner.id = `bar-${i}`;
+        bar.appendChild(barInner);
+
+        const scoreEl = document.createElement("div");
+        scoreEl.className = "prediction-score";
+        scoreEl.id = `score-${i}`;
+        scoreEl.textContent = "0.00";
+
+        row.appendChild(labelEl);
+        row.appendChild(bar);
+        row.appendChild(scoreEl);
+
+        predictionContainerEl.appendChild(row);
+      }
+    }
+
+    // Start webcam and begin prediction loop
+    async function initWebcam() {
+      await loadModel();
+      if (!model) return;
+
+      // Stop image mode if running
+      uploadedImageEl.style.display = "none";
+
+      try {
+        webcamStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        webcamEl.srcObject = webcamStream;
+        webcamEl.style.display = "block";
+        canvasEl.style.display = "none";
+        isWebcamRunning = true;
+
+        initButton.disabled = true;
+        stopButton.disabled = false;
+
+        statusEl.textContent = "Webcam running. Point an object at the camera.";
+        predictWebcam();
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Could not access webcam. Check browser permissions.";
+      }
+    }
+
+    // Stop webcam stream
+    function stopWebcam() {
+      isWebcamRunning = false;
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+        webcamStream = null;
+      }
+      webcamEl.style.display = "none";
+      stopButton.disabled = true;
+      initButton.disabled = false;
+      statusEl.textContent = "Webcam stopped.";
+    }
+
+    // Prediction loop for webcam
+    async function predictWebcam() {
+      if (!isWebcamRunning || !model) return;
+
+      // Predict on the video element directly
+      const predictions = await model.predict(webcamEl);
+      updatePredictionUI(predictions);
+
+      // Run again on the next animation frame
+      requestAnimationFrame(predictWebcam);
+    }
+
+    // Handle image upload mode
+    async function handleImageUpload(event) {
+      await loadModel();
+      if (!model) return;
+
+      const file = event.target.files[0];
+      if (!file) return;
+
+      stopWebcam(); // make sure webcam is off
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        uploadedImageEl.src = e.target.result;
+        uploadedImageEl.onload = async function() {
+          uploadedImageEl.style.display = "block";
+          webcamEl.style.display = "none";
+          canvasEl.style.display = "none";
+
+          statusEl.textContent = "Image loaded. Running prediction...";
+          const predictions = await model.predict(uploadedImageEl);
+          updatePredictionUI(predictions);
+          statusEl.textContent = "Prediction complete.";
+        };
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Update bars and scores
+    function updatePredictionUI(predictions) {
+      if (!predictions || predictions.length === 0) return;
+
+      // Normalize to [0, 100]%
+      predictions.forEach((p, i) => {
+        const probability = p.probability !== undefined ? p.probability : p.score || 0;
+        const percentage = (probability * 100).toFixed(2);
+
+        const barInner = document.getElementById(`bar-${i}`);
+        const scoreEl = document.getElementById(`score-${i}`);
+
+        if (barInner) {
+          barInner.style.width = `${percentage}%`;
+        }
+        if (scoreEl) {
+          scoreEl.textContent = `${percentage}%`;
+        }
+      });
+    }
+
+    // Auto-load model on first page load (optional)
+    loadModel();
+  </script>
+</body>
+</html>
